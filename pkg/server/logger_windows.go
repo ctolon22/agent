@@ -12,8 +12,8 @@ import (
 	el "golang.org/x/sys/windows/svc/eventlog"
 )
 
-// Default name for the Grafana Agent under Windows
-const ServiceName = "Grafana Agent"
+// Default name for the Windows RemoteWrite Agent under Windows
+const ServiceName = "Windows RemoteWrite Agent"
 
 // NewWindowsEventLogger creates a new logger that writes to the event log
 func NewWindowsEventLogger(cfg *Config) *Logger {

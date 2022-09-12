@@ -2,12 +2,12 @@ Unicode true
 # This installs two files, agent-windows-amd64.exe and logo.ico, creates a start menu shortcut, builds an uninstaller, and
 # adds uninstall information to the registry for Add/Remove Programs
 
-!define APPNAME "Grafana Agent"
-!define DESCRIPTION "The Grafana Agent collects observability data and sends it to a compatible remote write endpoint"
+!define APPNAME "Windows RemoteWrite Agent"
+!define DESCRIPTION "The Windows RemoteWrite Agent collects observability data and sends it to a compatible remote write endpoint"
 # These will be displayed by the "Click here for support information" link in "Add/Remove Programs"
-!define HELPURL "https://github.com/grafana/agent/discussions" # "Support Information" link
-!define UPDATEURL "https://github.com/grafana/agent/releases" # "Product Updates" link
-!define ABOUTURL "https://github.com/grafana/agent" # "Publisher" link
+# !define HELPURL "https://github.com/grafana/agent/discussions" # "Support Information" link
+# !define UPDATEURL "https://github.com/grafana/agent/releases" # "Product Updates" link
+# !define ABOUTURL "https://github.com/grafana/agent" # "Publisher" link
 
 RequestExecutionLevel admin #Require admin rights on NT6+ (When UAC is turned on)
 
@@ -25,13 +25,17 @@ outFile "${OUT}"
 LicenseData LICENSE
 
 # Everything must be global Vars
-Var EnableExporterCheck
-Var EnableExporterValue
+# Var EnableExporterCheck
+# Var EnableExporterValue
+Var TextURL
+Var TextBearer
+Var TextWindowsCollectors
+Var TextWindowsCollectorsValue
 Var EnableExporterDialog
 Var PassedInParameters
 Var Url
-Var Username
-Var Password
+Var BearerToken
+Var WindowsCollectors
 
 Page license
 Page directory
@@ -58,10 +62,10 @@ Section "install"
     IfSilent ThisIsSilent RunInstaller
     ThisIsSilent:
         ${GetParameters} $PassedInParameters
-        ${GetOptions} $PassedInParameters "/EnableExporter" $EnableExporterValue
+#        ${GetOptions} $PassedInParameters "/EnableExporter" $EnableExporterValue
         ${GetOptions} $PassedInParameters "/Url" $Url
-        ${GetOptions} $PassedInParameters "/Username" $Username
-        ${GetOptions} $PassedInParameters "/Password" $Password
+        ${GetOptions} $PassedInParameters "/BearerToken" $BearerToken
+        ${GetOptions} $PassedInParameters "/WindowsCollectors" $WindowsCollectors
         Call Install
         Return
     RunInstaller:
@@ -75,28 +79,44 @@ Function enableWindowsExporter
     ${If} $EnableExporterDialog == error
         Abort
     ${EndIf}
-
-    ${NSD_CreateLabel} 0 0 100% 12u "Enable Windows Exporter"
+    ${NSD_CreateLabel} 0 0 100% 12u "Configure Remote Write URL and Bearer Token"
     Pop $0
 
-    ${NSD_CreateCheckBox} 0 13u 100% 12u ""
-    Pop $EnableExporterCheck
+    ${NSD_CreateLabel} 0 15u 100% 12u "Prometheus Remote Write URL"
+    Pop $1
+
+    ${NSD_CreateText} 0 30u 100% 12u ""
+    Pop $TextURL
+
+    ${NSD_CreateLabel} 0 45u 100% 12u "Bearer Token for Prometheus Remote Write"
+    Pop $2
+
+    ${NSD_CreateText} 0 60u 100% 12u ""
+    Pop $TextBearer
+
+    ${NSD_CreateLabel} 0 75u 100% 12u "Windows collectors (comma-separated)"
+    Pop $3
+
+    ${NSD_CreateText} 0 90u 100% 12u "cpu,cs,logical_disk,net,os,system,memory,textfile"
+    Pop $TextWindowsCollectors
 
     nsDialogs::Show
 FunctionEnd
 
 Function enableWindowsExporterLeave
-    ${NSD_GetState} $EnableExporterCheck $EnableExporterValue
-    ${If} $EnableExporterValue == ${BST_CHECKED}
-        StrCpy $EnableExporterValue "true"
-    ${Else}
-        StrCpy $EnableExporterValue "false"
-    ${EndIf}
+    ${NSD_GetText} $TextURL $URL
+    ${NSD_GetText} $TextBearer $BearerToken
+    ${NSD_GetText} $TextWindowsCollectors $TextWindowsCollectorsValue
+#    ${If} $EnableExporterValue == ${BST_CHECKED}
+#        StrCpy $EnableExporterValue "true"
+#    ${Else}
+#        StrCpy $EnableExporterValue "false"
+#    ${EndIf}
 FunctionEnd
 
 Function Install
-    # Preemptively stop Grafana Agent if it is running
-    nsExec::ExecToLog 'sc stop "Grafana Agent"'
+    # Preemptively stop Agent if it is running
+    nsExec::ExecToLog 'sc stop "Windows RemoteWrite Agent"'
     Pop $0
     # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
     setOutPath $INSTDIR
@@ -109,15 +129,15 @@ Function Install
     writeUninstaller "$INSTDIR\uninstall.exe"
 
     # Registry information for add/remove programs
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName" "${APPNAME} ${VERSION} - ${DESCRIPTION}"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName" "${APPNAME} - ${DESCRIPTION}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "QuietUninstallString" "$\"$INSTDIR\uninstall.exe$\" /S"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "InstallLocation" "$\"$INSTDIR$\""
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayIcon" "$\"$INSTDIR\logo.ico$\""
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "Publisher" "$\"https://github.com/grafana/agent$\""
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "HelpLink" "$\"${HELPURL}$\""
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "URLUpdateInfo" "$\"${UPDATEURL}$\""
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "URLInfoAbout" "$\"${ABOUTURL}$\""
+    # WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "Publisher" "$\"https://github.com/grafana/agent$\""
+    # WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "HelpLink" "$\"${HELPURL}$\""
+    # WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "URLUpdateInfo" "$\"${UPDATEURL}$\""
+    # WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "URLInfoAbout" "$\"${ABOUTURL}$\""
     # There is no option for modifying or repairing the install
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoRepair" 1
@@ -126,12 +146,12 @@ Function Install
 
     # Create our batch file, since services cant run with parameters, nsexec is used to suppress console output, instead goes
     # to NSIS log window
-    nsExec::ExecToLog 'sc create "Grafana Agent" binpath= "\"$INSTDIR\agent-windows-amd64.exe\""'
+    nsExec::ExecToLog 'sc create "Windows RemoteWrite Agent" binpath= "\"$INSTDIR\agent-windows-amd64.exe\""'
     Pop $0
     # These separate create and config commands are needed, on the config the binpath is required
-    nsExec::ExecToLog 'sc config "Grafana Agent" start= auto binpath= "\"$INSTDIR\agent-windows-amd64.exe\" -config.file=\"$INSTDIR\agent-config.yaml\""'
+    nsExec::ExecToLog 'sc config "Windows RemoteWrite Agent" start= auto binpath= "\"$INSTDIR\agent-windows-amd64.exe\" -config.file=\"$INSTDIR\agent-config.yaml\""'
     Pop $0
-    nsExec::ExecToLog `sc start "Grafana Agent"`
+    nsExec::ExecToLog `sc start "Windows RemoteWrite Agent"`
     Pop $0
 FunctionEnd
 
@@ -146,22 +166,27 @@ Function WriteConfig
         FileWrite $9 `server:$\n`
         FileWrite $9 `  log_level: warn$\n`
         FileWrite $9 `metrics:$\n`
-        FileWrite $9 `  wal_directory: $APPDATA\grafana-agent-wal$\n`
+        FileWrite $9 `  wal_directory: $APPDATA\windows-remote-agent-wal$\n`
         FileWrite $9 `  global:$\n`
         FileWrite $9 `    scrape_interval: 1m$\n`
         ${If} $Url != ""
         FileWrite $9 `    remote_write: $\n`
         FileWrite $9 `    - url: $Url $\n`
-        FileWrite $9 `      basic_auth: $\n`
-        FileWrite $9 `        username: $Username $\n`
-        FileWrite $9 `        password: $Password $\n`
+        FileWrite $9 `      bearer_token: $BearerToken $\n`
+        FileWrite $9 `      write_relabel_configs:$\n`
+        FileWrite $9 `        - source_labels: ["__name__"]$\n`
+        FileWrite $9 `          regex: windows_.* $\n`
+        FileWrite $9 `          action: keep$\n`
         ${EndIf}
         FileWrite $9 `  configs:$\n`
         FileWrite $9 `    - name: integrations$\n`
-        ${If} $EnableExporterValue == "true"
         FileWrite $9 `integrations:$\n`
         FileWrite $9 `  windows_exporter:$\n`
-        FileWrite $9 `    enabled: true`
+        FileWrite $9 `    enabled: true$\n`
+        ${If} $WindowsCollectors != ""
+        FileWrite $9 `    enabled_collectors: $WindowsCollectors`
+        ${Else}
+        FileWrite $9 `    enabled_collectors: cpu,cs,logical_disk,net,os,system,memory,textfile`
         ${EndIf}
         FileClose $9 # and close the file
         Return
@@ -188,9 +213,9 @@ Section "uninstall"
     # Try to remove the Start Menu folder - this will only happen if it is empty
     RMDir "$SMPROGRAMS\${APPNAME}"
     # This is cleanup on the service and removing the exporter.
-    nsExec::ExecToLog `sc stop "Grafana Agent"`
+    nsExec::ExecToLog `sc stop "Windows RemoteWrite Agent"`
     Pop $0
-    nsExec::ExecToLog `sc delete "Grafana Agent" confirm`
+    nsExec::ExecToLog `sc delete "Windows RemoteWrite Agent" confirm`
     Pop $0
 
     # Remove files
@@ -204,7 +229,7 @@ Section "uninstall"
     # Try to remove the install directory - this will only happen if it is empty
     RMDir $INSTDIR
 
-    RMDir /r $APPDATA\grafana-agent-wal
+    RMDir /r $APPDATA\windows-remote-agent-wa
 
     # Remove uninstaller information from the registry
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
